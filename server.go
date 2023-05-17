@@ -1,18 +1,18 @@
 package main
 
 import (
+	"errors"
 	"fmt"
-	"github.com/google/uuid"
 	"log"
 	"net"
 	"sync"
 )
 
-var connList map[string]net.Conn
+var connList map[string]*Tcp
 var lock sync.Mutex
 
 func runServer() error {
-	connList := make(map[string]net.Conn)
+	connList = make(map[string]*Tcp)
 	ln, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%s", config.Port))
 	if err != nil {
 		return err
@@ -24,44 +24,56 @@ func runServer() error {
 				log.Println("accept conn error:", err.Error())
 				continue
 			}
-			password, err := readBytes(conn)
+
+			tcp := NewTcp(conn, config.Role)
+
+			err = verifyPassword(tcp)
 			if err != nil {
-				log.Println("read client password error:", err.Error())
+				log.Println("verify password failed:", err.Error())
 				continue
 			}
-			if password != "@"+config.Password+"@" {
-				log.Println("client password not match:", conn.RemoteAddr())
-				continue
-			}
+
 			lock.Lock()
-			id := conn.RemoteAddr().String() + "-" + uuid.New().String()[:5]
-			connList[id] = conn
+			connList[tcp.GetTcpID()] = tcp
 			lock.Unlock()
-			go handlerConn(id, conn)
+
+			go handlerConn(tcp)
 		}
 	}()
 	return nil
 }
 
-func handlerConn(id string, conn net.Conn) {
-	for {
-		content, err := readBytes(conn)
-		if err != nil {
-			log.Println("read client error:", err.Error())
-			break
-		}
-		go sendContent(id, content)
+func verifyPassword(tcp *Tcp) error {
+	password, err := tcp.ReadMsg()
+	if err != nil {
+		return err
 	}
-	lock.Lock()
-	defer lock.Unlock()
-	delete(connList, id)
+	if password != "@"+config.Password+"@" {
+		return errors.New("password not match")
+	}
+	return nil
 }
 
-func sendContent(id, content string) {
-	for key, conn := range connList {
-		if id == key {
-			continue
+func handlerConn(tcp *Tcp) {
+	for {
+		content, err := tcp.ReadMsg()
+		if err != nil {
+			log.Println(tcp.GetTcpID(), "read msg error:", err.Error())
+			break
 		}
-		_ = sendBytes(conn, content)
+		go notify(content)
+	}
+	lock.Lock()
+	delete(connList, tcp.GetTcpID())
+	lock.Unlock()
+}
+
+func notify(content string) {
+	for _, tcp := range connList {
+		tcp := tcp
+		err := tcp.SendMsg(content)
+		if err != nil {
+			tcp.log("notify msg error:%s", err.Error())
+		}
 	}
 }
