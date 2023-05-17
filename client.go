@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/atotto/clipboard"
 	"net"
 	"time"
@@ -41,15 +42,15 @@ func runClient() {
 	}()
 	for {
 		content, err := readBytes(conn)
+		fmt.Println("content:", content)
 		if err != nil {
 			panic(err)
 		}
-		if content != lastContent {
-			lastContent = content
-			err := clipboard.WriteAll(content)
-			if err != nil {
-				panic(err)
-			}
+		err = clipboard.WriteAll(content)
+		if err != nil {
+			panic(err)
 		}
+		lastContent = content
+		time.Sleep(time.Second * 2)
 	}
 }
