@@ -6,11 +6,10 @@ import (
 )
 
 type Config struct {
-	Role         string
-	Host         string
-	Port         string
-	Password     string
-	IntervalTime int
+	Role     string
+	Host     string
+	Port     string
+	Password string
 }
 
 var config Config

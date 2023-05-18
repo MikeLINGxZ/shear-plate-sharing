@@ -1,10 +1,10 @@
 # shear-plate-sharing
 
-## what is that?
+## What is that?
 when you use different os in different computer,you may need share shear plate,
 so this program is the answer.
 
-## how to use?
+## How to use?
 ### 1、edit `config.yml`
 server:
 ```yaml
