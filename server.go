@@ -48,11 +48,13 @@ func verifyPassword(tcp *Tcp) error {
 	if err != nil {
 		return err
 	}
-	if password != "@"+config.Password+"@" {
+	if string(password) != "@"+config.Password+"@" {
 		return errors.New("password not match")
 	}
 	return nil
 }
+
+var last []byte
 
 func handlerConn(tcp *Tcp) {
 	for {
@@ -61,16 +63,23 @@ func handlerConn(tcp *Tcp) {
 			log.Println(tcp.GetTcpID(), "read msg error:", err.Error())
 			break
 		}
-		go notify(content)
+		if string(last) == string(content) {
+			continue
+		}
+		last = content
+		notify(tcp.GetTcpID(), content)
 	}
 	lock.Lock()
 	delete(connList, tcp.GetTcpID())
 	lock.Unlock()
 }
 
-func notify(content string) {
+func notify(id string, content []byte) {
 	for _, tcp := range connList {
 		tcp := tcp
+		if tcp.GetTcpID() == id {
+			continue
+		}
 		err := tcp.SendMsg(content)
 		if err != nil {
 			tcp.log("notify msg error:%s", err.Error())

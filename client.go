@@ -1,55 +1,46 @@
 package main
 
 import (
-	"github.com/atotto/clipboard"
+	"context"
+	"golang.design/x/clipboard"
 	"net"
 )
 
-var oldContent string
-
 func runClient() {
+	// connect server
 	conn, err := net.Dial("tcp", config.Host+":"+config.Port)
 	if err != nil {
 		panic(err)
 	}
-
 	tcp := NewTcp(conn, "client")
 	// send password
-	err = tcp.SendMsg("@" + config.Password + "@")
+	err = tcp.SendMsg([]byte("@" + config.Password + "@"))
 	if err != nil {
 		panic(err)
 	}
+	// clipboard
+	err = clipboard.Init()
+	if err != nil {
+		panic(err)
+	}
+	clipboardCh := clipboard.Watch(context.Background(), clipboard.FmtText)
 
-	// listen shear plate
+	// write or read
 	go func() {
 		for {
-			newContent, err := clipboard.ReadAll()
+			content := <-clipboardCh
+			err := tcp.SendMsg(content)
 			if err != nil {
 				panic(err)
 			}
-			if newContent == oldContent {
-				continue
-			}
-			err = tcp.SendMsg(newContent)
-			if err != nil {
-				panic(err)
-			}
-			oldContent = newContent
 		}
 	}()
-
 	for {
-		newContent, err := tcp.ReadMsg()
+		content, err := tcp.ReadMsg()
 		if err != nil {
 			panic(err)
 		}
-		if newContent == oldContent {
-			continue
-		}
-		err = clipboard.WriteAll(newContent)
-		if err != nil {
-			panic(err)
-		}
-		oldContent = newContent
+		changed := clipboard.Write(clipboard.FmtText, content)
+		<-changed
 	}
 }

@@ -25,33 +25,31 @@ func NewTcp(conn net.Conn, title string) *Tcp {
 	}
 }
 
-func (t *Tcp) ReadMsg() (string, error) {
+func (t *Tcp) ReadMsg() ([]byte, error) {
 	// read content len
 	lenInfoBytes := make([]byte, headerLen)
 	binLen, err := t.conn.Read(lenInfoBytes)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if binLen != headerLen {
-		return "", errors.New("msg len not match")
+		return nil, errors.New("msg len not match")
 	}
 	contentLen := bytesToInt64(lenInfoBytes)
 	// read content
 	contentBytes := make([]byte, contentLen)
 	binLen, err = t.conn.Read(contentBytes)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if int64(binLen) != contentLen {
-		return "", errors.New("content len not match")
+		return nil, errors.New("content len not match")
 	}
-	content := string(contentBytes)
-	t.log("read msg: %s", content)
-	return content, nil
+	t.log("read msg: %s", string(contentBytes))
+	return contentBytes, nil
 }
 
-func (t *Tcp) SendMsg(msg string) error {
-	contentBytes := []byte(msg)
+func (t *Tcp) SendMsg(contentBytes []byte) error {
 	contentLen := len(contentBytes)
 	contentLenBytes := int64ToBytes(int64(contentLen))
 	binLen, err := t.conn.Write(contentLenBytes)
@@ -68,7 +66,7 @@ func (t *Tcp) SendMsg(msg string) error {
 	if binLen != contentLen {
 		return errors.New("content len not match")
 	}
-	t.log("send msg: %s", msg)
+	t.log("send msg: %s", string(contentBytes))
 	return nil
 }
 
