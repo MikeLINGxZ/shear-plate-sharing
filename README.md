@@ -9,7 +9,6 @@ so this program is the answer.
 server:
 ```yaml
 Role: server
-Host: 192.168.31.174
 Port: 7777
 Password: xxx
 ```

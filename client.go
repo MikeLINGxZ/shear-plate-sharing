@@ -8,6 +8,9 @@ import (
 
 func runClient() {
 	// connect server
+	if config.Role == "server" {
+		config.Host = "127.0.0.1"
+	}
 	conn, err := net.Dial("tcp", config.Host+":"+config.Port)
 	if err != nil {
 		panic(err)
