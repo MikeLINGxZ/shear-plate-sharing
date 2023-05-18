@@ -1,56 +1,55 @@
 package main
 
 import (
-	"fmt"
 	"github.com/atotto/clipboard"
 	"net"
-	"time"
 )
 
-var lastContent string
+var oldContent string
 
 func runClient() {
-	content, err := clipboard.ReadAll()
-	if err != nil {
-		panic(err)
-	}
-	lastContent = content
 	conn, err := net.Dial("tcp", config.Host+":"+config.Port)
 	if err != nil {
 		panic(err)
 	}
-	err = sendBytes(conn, "@"+config.Password+"@")
+
+	tcp := NewTcp(conn, "client")
+	// send password
+	err = tcp.SendMsg("@" + config.Password + "@")
 	if err != nil {
 		panic(err)
 	}
 
+	// listen shear plate
 	go func() {
 		for {
-			content, err := clipboard.ReadAll()
+			newContent, err := clipboard.ReadAll()
 			if err != nil {
 				panic(err)
 			}
-			if content != lastContent {
-				err := sendBytes(conn, content)
-				if err != nil {
-					panic(err)
-				}
-				lastContent = content
+			if newContent == oldContent {
+				continue
 			}
-			time.Sleep(time.Second * 2)
+			err = tcp.SendMsg(newContent)
+			if err != nil {
+				panic(err)
+			}
+			oldContent = newContent
 		}
 	}()
+
 	for {
-		content, err := readBytes(conn)
-		fmt.Println("content:", content)
+		newContent, err := tcp.ReadMsg()
 		if err != nil {
 			panic(err)
 		}
-		err = clipboard.WriteAll(content)
+		if newContent == oldContent {
+			continue
+		}
+		err = clipboard.WriteAll(newContent)
 		if err != nil {
 			panic(err)
 		}
-		lastContent = content
-		time.Sleep(time.Second * 2)
+		oldContent = newContent
 	}
 }
