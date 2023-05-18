@@ -79,6 +79,20 @@ func (t *Tcp) log(text string, args ...interface{}) {
 	log.Printf("[%s-%s] %s \n", t.title, t.id, msg)
 }
 
+func (t *Tcp) Watch() <-chan []byte {
+	ch := make(chan []byte, 1)
+	go func() {
+		for {
+			msg, err := t.ReadMsg()
+			if err != nil {
+				panic(err)
+			}
+			ch <- msg
+		}
+	}()
+	return ch
+}
+
 func int64ToBytes(num int64) []byte {
 	byteArray := make([]byte, headerLen)
 	binary.LittleEndian.PutUint64(byteArray, uint64(num))

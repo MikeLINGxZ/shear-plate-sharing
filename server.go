@@ -54,8 +54,6 @@ func verifyPassword(tcp *Tcp) error {
 	return nil
 }
 
-var last []byte
-
 func handlerConn(tcp *Tcp) {
 	for {
 		content, err := tcp.ReadMsg()
@@ -63,10 +61,6 @@ func handlerConn(tcp *Tcp) {
 			log.Println(tcp.GetTcpID(), "read msg error:", err.Error())
 			break
 		}
-		if string(last) == string(content) {
-			continue
-		}
-		last = content
 		notify(tcp.GetTcpID(), content)
 	}
 	lock.Lock()

@@ -23,24 +23,31 @@ func runClient() {
 	if err != nil {
 		panic(err)
 	}
-	clipboardCh := clipboard.Watch(context.Background(), clipboard.FmtText)
 
-	// write or read
-	go func() {
-		for {
-			content := <-clipboardCh
+	clipboardCh := clipboard.Watch(context.Background(), clipboard.FmtText)
+	networkCh := tcp.Watch()
+	clipboardHandler(tcp, clipboardCh, networkCh)
+}
+
+func clipboardHandler(tcp *Tcp, clipboardCh, networkCh <-chan []byte) {
+	lastContent := clipboard.Read(clipboard.FmtText)
+	for {
+		var content []byte
+		select {
+		case content = <-clipboardCh:
+			if string(content) == string(lastContent) {
+				continue
+			}
 			err := tcp.SendMsg(content)
 			if err != nil {
 				panic(err)
 			}
+		case content = <-networkCh:
+			if string(content) == string(lastContent) {
+				continue
+			}
+			clipboard.Write(clipboard.FmtText, content)
 		}
-	}()
-	for {
-		content, err := tcp.ReadMsg()
-		if err != nil {
-			panic(err)
-		}
-		changed := clipboard.Write(clipboard.FmtText, content)
-		<-changed
+		lastContent = content
 	}
 }
