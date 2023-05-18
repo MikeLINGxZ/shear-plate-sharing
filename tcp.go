@@ -74,14 +74,10 @@ func (t *Tcp) GetTcpID() string {
 	return t.id
 }
 
-func (t *Tcp) log(text string, args ...interface{}) {
-	msg := fmt.Sprintf(text, args...)
-	log.Printf("[%s-%s] %s \n", t.title, t.id, msg)
-}
-
 func (t *Tcp) Watch() <-chan []byte {
 	ch := make(chan []byte, 1)
 	go func() {
+		defer close(ch)
 		for {
 			msg, err := t.ReadMsg()
 			if err != nil {
@@ -91,6 +87,18 @@ func (t *Tcp) Watch() <-chan []byte {
 		}
 	}()
 	return ch
+}
+
+func (t *Tcp) Close() {
+	err := t.conn.Close()
+	if err != nil {
+		t.log("close conn error: %s", err.Error())
+	}
+}
+
+func (t *Tcp) log(text string, args ...interface{}) {
+	msg := fmt.Sprintf(text, args...)
+	log.Printf("[%s-%s] %s \n", t.title, t.id, msg)
 }
 
 func int64ToBytes(num int64) []byte {

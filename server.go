@@ -55,7 +55,7 @@ func verifyPassword(tcp *Tcp) error {
 }
 
 func handlerConn(tcp *Tcp) {
-	defer tcp.conn.Close()
+	defer tcp.Close()
 	for {
 		content, err := tcp.ReadMsg()
 		if err != nil {

@@ -21,13 +21,9 @@ Password: xxx
 tips: do not run client when you pc has been run server
 
 ### 2、run
-bin:
 ```shell
-./sps
-```
-code:
-```shell
-go run ./main.go
+export CGO_ENABLED=1
+go run ./
 ```
 
 ## todo

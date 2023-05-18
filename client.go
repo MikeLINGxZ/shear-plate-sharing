@@ -33,7 +33,7 @@ func runClient() {
 }
 
 func clipboardHandler(tcp *Tcp, clipboardCh, networkCh <-chan []byte) {
-	defer tcp.conn.Close()
+	defer tcp.Close()
 	lastContent := clipboard.Read(clipboard.FmtText)
 	for {
 		var content []byte
