@@ -1,12 +1,9 @@
 package main
 
 import (
-	"encoding/binary"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/google/uuid"
-	"log"
 	"net"
 )
 
@@ -16,30 +13,44 @@ type ContentType int
 
 const (
 	CTUnknown ContentType = iota
+	CTSystem
 	CTPassword
 	CTText
 	CTImg
 	CTFile
 )
 
+type SystemContent struct {
+	Text string
+	Code int
+}
+
+func (sc *SystemContent) Bytes() []byte {
+	bytes, _ := json.Marshal(sc)
+	return bytes
+}
+
 type TcpMsg struct {
 	Name    string
 	Content []byte
 	Type    ContentType
+	To      string `json:"-"`
 }
 
 type Tcp struct {
-	title   string
+	role    RoleType
 	conn    net.Conn
 	id      string
 	watchCh chan *TcpMsg
+	log     *Log
 }
 
-func NewTcp(conn net.Conn, title string) *Tcp {
+func NewTcp(conn net.Conn, role RoleType, log *Log) *Tcp {
 	return &Tcp{
-		title: title,
-		conn:  conn,
-		id:    conn.RemoteAddr().String() + "-" + uuid.New().String()[:5],
+		role: role,
+		conn: conn,
+		id:   conn.RemoteAddr().String() + "-" + uuid.New().String()[:5],
+		log:  log,
 	}
 }
 
@@ -80,7 +91,7 @@ func (t *Tcp) send(name string, contentBytes []byte, contentType ContentType) er
 	}
 
 	contentLen := len(msgBytes)
-	contentLenBytes := int64ToBytes(int64(contentLen))
+	contentLenBytes := Int64ToBytes(int64(contentLen))
 	binLen, err := t.conn.Write(contentLenBytes)
 	if err != nil {
 		return err
@@ -95,7 +106,8 @@ func (t *Tcp) send(name string, contentBytes []byte, contentType ContentType) er
 	if binLen != contentLen {
 		return errors.New("content len not match")
 	}
-	t.logMsg("send", msg)
+	msg.To = t.conn.RemoteAddr().String()
+	t.log.LogSendMsg(msg)
 	return nil
 }
 
@@ -109,7 +121,7 @@ func (t *Tcp) read() (*TcpMsg, error) {
 	if binLen != headerLen {
 		return nil, errors.New("msg len not match")
 	}
-	msgLen := bytesToInt64(lenInfoBytes)
+	msgLen := BytesToInt64(lenInfoBytes)
 	// read content
 	msgBytes := make([]byte, msgLen)
 	binLen, err = t.conn.Read(msgBytes)
@@ -124,7 +136,8 @@ func (t *Tcp) read() (*TcpMsg, error) {
 	if err != nil {
 		return nil, err
 	}
-	t.logMsg("read", msg)
+	msg.To = t.conn.RemoteAddr().String()
+	t.log.LogReadMsg(msg)
 	return msg, nil
 }
 
@@ -138,31 +151,6 @@ func (t *Tcp) Close() {
 	}
 	err := t.conn.Close()
 	if err != nil {
-		t.log("close conn error: %s", err.Error())
+		t.log.Log("close conn error: %s", err.Error())
 	}
-}
-
-func (t *Tcp) log(text string, args ...interface{}) {
-	msg := fmt.Sprintf(text, args...)
-	log.Printf("[%s-%s] %s \n", t.title, t.id, msg)
-}
-
-func (t *Tcp) logMsg(text string, msg *TcpMsg) {
-	var content []byte
-	if msg.Type == CTText || msg.Type == CTPassword {
-		content = msg.Content
-	}
-	logStr := fmt.Sprintf("role:%s \nmsg type:%d \nmsg name: %s\nmsg content: %s\n", text, msg.Type, msg.Name, string(content))
-	log.Printf("[%s-%s] \n%s \n", t.title, t.id, logStr)
-}
-
-func int64ToBytes(num int64) []byte {
-	byteArray := make([]byte, headerLen)
-	binary.LittleEndian.PutUint64(byteArray, uint64(num))
-
-	return byteArray
-}
-
-func bytesToInt64(bytes []byte) int64 {
-	return int64(binary.LittleEndian.Uint64(bytes[:]))
 }
