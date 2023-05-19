@@ -17,7 +17,11 @@ func runClient() {
 	}
 	tcp := NewTcp(conn, "client")
 	// send password
-	err = tcp.SendMsg([]byte("@" + config.Password + "@"))
+	err = tcp.Send(&TcpMsg{
+		Name:    "",
+		Content: []byte("@" + config.Password + "@"),
+		Type:    CTPassword,
+	})
 	if err != nil {
 		panic(err)
 	}
@@ -32,7 +36,7 @@ func runClient() {
 	clipboardHandler(tcp, clipboardCh, networkCh)
 }
 
-func clipboardHandler(tcp *Tcp, clipboardCh, networkCh <-chan []byte) {
+func clipboardHandler(tcp *Tcp, clipboardCh <-chan []byte, msgCh <-chan *TcpMsg) {
 	defer tcp.Close()
 	lastContent := clipboard.Read(clipboard.FmtText)
 	for {
@@ -42,12 +46,19 @@ func clipboardHandler(tcp *Tcp, clipboardCh, networkCh <-chan []byte) {
 			if string(content) == string(lastContent) {
 				continue
 			}
-			err := tcp.SendMsg(content)
+			err := tcp.Send(&TcpMsg{
+				Name:    "",
+				Content: content,
+				Type:    CTText,
+			})
 			if err != nil {
 				panic(err)
 			}
-		case content = <-networkCh:
-			if string(content) == string(lastContent) {
+		case msg := <-msgCh:
+			if msg.Type == CTText && string(msg.Content) == string(lastContent) {
+				continue
+			}
+			if msg.Type != CTText {
 				continue
 			}
 			clipboard.Write(clipboard.FmtText, content)
