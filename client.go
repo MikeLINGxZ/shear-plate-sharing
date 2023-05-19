@@ -61,7 +61,7 @@ func clipboardHandler(tcp *Tcp, clipboardCh <-chan []byte, msgCh <-chan *TcpMsg)
 			if msg.Type != CTText {
 				continue
 			}
-			clipboard.Write(clipboard.FmtText, content)
+			clipboard.Write(clipboard.FmtText, msg.Content)
 		}
 		lastContent = content
 	}
