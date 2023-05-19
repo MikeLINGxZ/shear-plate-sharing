@@ -9,6 +9,7 @@ import (
 var clientLog *Log
 var lastContent []byte
 var msgHandler map[ContentType]func(msg *TcpMsg) error
+var isServer bool
 
 func runClient() {
 	// init log

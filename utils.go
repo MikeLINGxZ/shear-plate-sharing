@@ -36,10 +36,16 @@ func (l *Log) Log(format string, v ...any) {
 }
 
 func (l *Log) LogSendMsg(msg *TcpMsg) {
+	if isServer && l.role == RTClient {
+		return
+	}
 	l.logMsg("send", msg)
 }
 
 func (l *Log) LogReadMsg(msg *TcpMsg) {
+	if isServer && l.role == RTClient {
+		return
+	}
 	l.logMsg("read", msg)
 }
 

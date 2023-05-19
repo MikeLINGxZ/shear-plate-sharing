@@ -13,6 +13,7 @@ var lock sync.Mutex
 var serverLog *Log
 
 func runServer() error {
+	isServer = true
 	// init log
 	serverLog = NewLog(RTServer)
 	// init conn list
