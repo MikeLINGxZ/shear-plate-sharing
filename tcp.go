@@ -2,12 +2,11 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"github.com/google/uuid"
 	"net"
 )
 
-const headerLen int = 8
+const headerLen int = 16
 
 type ContentType int
 
@@ -30,19 +29,12 @@ func (sc *SystemContent) Bytes() []byte {
 	return bytes
 }
 
-type TcpMsg struct {
-	Name    string
-	Content []byte
-	Type    ContentType
-	To      string `json:"-"`
-}
-
 type Tcp struct {
-	role    RoleType
-	conn    net.Conn
-	id      string
-	watchCh chan *TcpMsg
-	log     *Log
+	role   RoleType
+	conn   net.Conn
+	id     string
+	dataCh chan clipboardData
+	log    *Log
 }
 
 func NewTcp(conn net.Conn, role RoleType, log *Log) *Tcp {
@@ -54,91 +46,42 @@ func NewTcp(conn net.Conn, role RoleType, log *Log) *Tcp {
 	}
 }
 
-func (t *Tcp) Watch() <-chan *TcpMsg {
-	if t.watchCh != nil {
-		return t.watchCh
-	}
-	t.watchCh = make(chan *TcpMsg, 1)
-	go func() {
-		for {
-			msg, err := t.Read()
-			if err != nil {
-				panic(err)
-			}
-			t.watchCh <- msg
-		}
-	}()
-	return t.watchCh
-}
-
-func (t *Tcp) Read() (*TcpMsg, error) {
+func (t *Tcp) Read() (ContentType, []byte, error) {
 	return t.read()
 }
 
-func (t *Tcp) Send(msg *TcpMsg) error {
-	return t.send(msg.Name, msg.Content, msg.Type)
+func (t *Tcp) Send(contentType ContentType, contentBytes []byte) error {
+	return t.send(contentType, contentBytes)
 }
 
-func (t *Tcp) send(name string, contentBytes []byte, contentType ContentType) error {
-	msg := &TcpMsg{
-		Name:    name,
-		Content: contentBytes,
-		Type:    contentType,
-	}
-	msgBytes, err := json.Marshal(msg)
+func (t *Tcp) send(contentType ContentType, contentBytes []byte) error {
+	header := t.GenHeader(len(contentBytes), contentType)
+	_, err := t.conn.Write(header)
 	if err != nil {
 		return err
 	}
-
-	contentLen := len(msgBytes)
-	contentLenBytes := Int64ToBytes(int64(contentLen))
-	binLen, err := t.conn.Write(contentLenBytes)
+	_, err = t.conn.Write(contentBytes)
 	if err != nil {
 		return err
 	}
-	if binLen != headerLen {
-		return errors.New("msg len not match")
-	}
-	binLen, err = t.conn.Write(msgBytes)
-	if err != nil {
-		return err
-	}
-	if binLen != contentLen {
-		return errors.New("content len not match")
-	}
-	msg.To = t.conn.RemoteAddr().String()
-	t.log.LogSendMsg(msg)
 	return nil
 }
 
-func (t *Tcp) read() (*TcpMsg, error) {
+func (t *Tcp) read() (ContentType, []byte, error) {
 	// read content len
-	lenInfoBytes := make([]byte, headerLen)
-	binLen, err := t.conn.Read(lenInfoBytes)
+	headerBytes := make([]byte, headerLen)
+	_, err := t.conn.Read(headerBytes[:])
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
-	if binLen != headerLen {
-		return nil, errors.New("msg len not match")
-	}
-	msgLen := BytesToInt64(lenInfoBytes)
-	// read content
-	msgBytes := make([]byte, msgLen)
-	binLen, err = t.conn.Read(msgBytes)
+	size, contentType := t.PauseHeader(headerBytes)
+	contentBytes := make([]byte, size)
+	_, err = t.conn.Read(contentBytes[:])
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
-	if int64(binLen) != msgLen {
-		return nil, errors.New("content len not match")
-	}
-	msg := &TcpMsg{}
-	err = json.Unmarshal(msgBytes, msg)
-	if err != nil {
-		return nil, err
-	}
-	msg.To = t.conn.RemoteAddr().String()
-	t.log.LogReadMsg(msg)
-	return msg, nil
+
+	return contentType, contentBytes, nil
 }
 
 func (t *Tcp) GetTcpID() string {
@@ -146,11 +89,43 @@ func (t *Tcp) GetTcpID() string {
 }
 
 func (t *Tcp) Close() {
-	if t.watchCh != nil {
-		close(t.watchCh)
-	}
 	err := t.conn.Close()
 	if err != nil {
 		t.log.Log("close conn error: %s", err.Error())
 	}
+}
+
+func (t *Tcp) ClipboardDataWatch() chan clipboardData {
+	if t.dataCh != nil {
+		return t.dataCh
+	}
+	t.dataCh = make(chan clipboardData, 1)
+	go func() {
+		for {
+			data := clipboardData{}
+			var err error
+			data.ContentType, data.Content, err = t.Read()
+			if err != nil {
+				panic(err)
+			}
+			t.dataCh <- data
+		}
+	}()
+
+	return t.dataCh
+}
+
+func (t *Tcp) GenHeader(size int, contentType ContentType) []byte {
+	contentLenBytes := Int64ToBytes(int64(size))
+	contentTypeBytes := Int64ToBytes(int64(contentType))
+	contentLenBytes = append(contentLenBytes, contentTypeBytes...)
+	return contentLenBytes
+}
+
+func (t *Tcp) PauseHeader(header []byte) (int, ContentType) {
+	contentLenBytes := header[:8]
+	contentTypeBytes := header[8:]
+	size := BytesToInt64(contentLenBytes)
+	contentType := ContentType(BytesToInt64(contentTypeBytes))
+	return int(size), contentType
 }

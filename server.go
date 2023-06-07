@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"sync"
 )
@@ -51,22 +50,15 @@ func runServer() error {
 }
 
 func verifyPassword(tcp *Tcp) error {
-	msg, err := tcp.Read()
+	contentType, contentBytes, err := tcp.Read()
 	if err != nil {
 		return err
 	}
-	if msg.Type != CTPassword {
+	if contentType != CTPassword {
 		return errors.New("verify password fail")
 	}
-	if string(msg.Content) != config.Password {
-		err := tcp.Send(&TcpMsg{
-			Name: "",
-			Content: (&SystemContent{
-				Text: "password not match",
-				Code: 403,
-			}).Bytes(),
-			Type: CTSystem,
-		})
+	if string(contentBytes) != config.Password {
+		err := tcp.Send(CTSystem, []byte("403"))
 		if err != nil {
 			return err
 		}
@@ -78,28 +70,24 @@ func verifyPassword(tcp *Tcp) error {
 func listenMsg(tcp *Tcp) {
 	defer tcp.Close()
 	for {
-		msg, err := tcp.Read()
+		contentType, contentBytes, err := tcp.Read()
 		if err != nil {
-			log.Println(tcp.GetTcpID(), "read msg error:", err.Error())
-			break
-		}
-		if msg.Type == CTSystem || msg.Type == CTPassword {
 			continue
 		}
-		notifyMsg(tcp.GetTcpID(), msg)
+		notifyMsg(tcp.GetTcpID(), contentType, contentBytes)
 	}
 	lock.Lock()
 	delete(connList, tcp.GetTcpID())
 	lock.Unlock()
 }
 
-func notifyMsg(id string, content *TcpMsg) {
+func notifyMsg(id string, contentType ContentType, contentBytes []byte) {
 	for _, tcp := range connList {
 		tcp := tcp
 		if tcp.GetTcpID() == id {
 			continue
 		}
-		err := tcp.Send(content)
+		err := tcp.Send(contentType, contentBytes)
 		if err != nil {
 			tcp.log.Log("notifyMsg msg error:%s", err.Error())
 		}
