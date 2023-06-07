@@ -5,12 +5,16 @@ import (
 	"github.com/spf13/viper"
 )
 
+type RoleType string
+
+const RTServer RoleType = "server"
+const RTClient RoleType = "client"
+
 type Config struct {
-	Role         string
-	Host         string
-	Port         string
-	Password     string
-	IntervalTime int
+	Role     RoleType
+	Host     string
+	Port     string
+	Password string
 }
 
 var config Config

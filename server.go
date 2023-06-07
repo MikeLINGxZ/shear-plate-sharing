@@ -10,70 +10,98 @@ import (
 
 var connList map[string]*Tcp
 var lock sync.Mutex
+var serverLog *Log
 
 func runServer() error {
+	isServer = true
+	// init log
+	serverLog = NewLog(RTServer)
+	// init conn list
 	connList = make(map[string]*Tcp)
+	// listen tcp
 	ln, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%s", config.Port))
 	if err != nil {
 		return err
 	}
+	// handle conn
 	go func() {
 		for {
+			// accept conn
 			conn, err := ln.Accept()
 			if err != nil {
-				log.Println("accept conn error:", err.Error())
+				serverLog.Log("accept conn error:", err.Error())
 				continue
 			}
-
-			tcp := NewTcp(conn, config.Role)
-
+			tcp := NewTcp(conn, config.Role, serverLog)
+			// verify password
 			err = verifyPassword(tcp)
 			if err != nil {
-				log.Println("verify password failed:", err.Error())
+				serverLog.Log("client password verify failed:", err.Error())
 				continue
 			}
-
+			// add conn list
 			lock.Lock()
 			connList[tcp.GetTcpID()] = tcp
 			lock.Unlock()
-
-			go handlerConn(tcp)
+			// listen msg
+			go listenMsg(tcp)
 		}
 	}()
 	return nil
 }
 
 func verifyPassword(tcp *Tcp) error {
-	password, err := tcp.ReadMsg()
+	msg, err := tcp.Read()
 	if err != nil {
 		return err
 	}
-	if password != "@"+config.Password+"@" {
-		return errors.New("password not match")
+	if msg.Type != CTPassword {
+		return errors.New("verify password fail")
+	}
+	if string(msg.Content) != config.Password {
+		err := tcp.Send(&TcpMsg{
+			Name: "",
+			Content: (&SystemContent{
+				Text: "password not match",
+				Code: 403,
+			}).Bytes(),
+			Type: CTSystem,
+		})
+		if err != nil {
+			return err
+		}
+		return errors.New("verify password fail")
 	}
 	return nil
 }
 
-func handlerConn(tcp *Tcp) {
+func listenMsg(tcp *Tcp) {
+	defer tcp.Close()
 	for {
-		content, err := tcp.ReadMsg()
+		msg, err := tcp.Read()
 		if err != nil {
 			log.Println(tcp.GetTcpID(), "read msg error:", err.Error())
 			break
 		}
-		go notify(content)
+		if msg.Type == CTSystem || msg.Type == CTPassword {
+			continue
+		}
+		notifyMsg(tcp.GetTcpID(), msg)
 	}
 	lock.Lock()
 	delete(connList, tcp.GetTcpID())
 	lock.Unlock()
 }
 
-func notify(content string) {
+func notifyMsg(id string, content *TcpMsg) {
 	for _, tcp := range connList {
 		tcp := tcp
-		err := tcp.SendMsg(content)
+		if tcp.GetTcpID() == id {
+			continue
+		}
+		err := tcp.Send(content)
 		if err != nil {
-			tcp.log("notify msg error:%s", err.Error())
+			tcp.log.Log("notifyMsg msg error:%s", err.Error())
 		}
 	}
 }
